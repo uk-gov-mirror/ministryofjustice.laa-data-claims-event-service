@@ -15,11 +15,11 @@ on:
         type: string
         required: false
         description: "Hotfix only: version to publish when release_type is none (e.g. 0.2.3.1)"
-      last_environment:
+      target_environment:
         type: choice
         required: true
         default: "uat"
-        description: "Hotfix only: last environment to deploy to"
+        description: "Hotfix only: the single environment to deploy to"
         options: [ "uat", "staging", "production" ]
 
 permissions:
@@ -93,6 +93,7 @@ jobs:
       snyk_client_secret: ${{ secrets.SNYK_CLIENT_SECRET }}
 
   deploy-uat:
+    if: ${{ inputs.target_environment == '' || inputs.target_environment == 'uat' }}
     needs:
       - ecr-publish-image
       - pact-test
@@ -115,7 +116,7 @@ jobs:
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME: ${{ secrets.LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME }}
 
   deploy-staging:
-    if: ${{ inputs.last_environment != 'uat' }}
+    if: ${{ !cancelled() && !failure() && (inputs.target_environment == '' || inputs.target_environment == 'staging') }}
     needs:
       - ecr-publish-image
       - pact-test
@@ -139,7 +140,7 @@ jobs:
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME: ${{ secrets.LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME }}
 
   deploy-production:
-    if: ${{ inputs.last_environment == 'production' }}
+    if: ${{ !cancelled() && !failure() && (inputs.target_environment == '' || inputs.target_environment == 'production') }}
     needs:
       - ecr-publish-image
       - pact-test
