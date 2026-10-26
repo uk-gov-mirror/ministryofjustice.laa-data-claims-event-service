@@ -77,7 +77,9 @@ public class SubmissionValidationService {
     if (isValidationComplete(submission, finalValidation)) {
       // A previous attempt may have saved submission failure but failed to update the bulk status.
       // Retry that update without rerunning validation.
-      if (finalValidation && submission.getStatus() == SubmissionStatus.VALIDATION_FAILED) {
+      if (finalValidation
+          && submission.getStatus() == SubmissionStatus.VALIDATION_FAILED
+          && submission.getBulkSubmissionId() != null) {
         dataClaimsRestClient.updateBulkSubmission(
             submission.getBulkSubmissionId().toString(),
             failedBulkSubmissionPatch(submission.getBulkSubmissionId()));
@@ -167,14 +169,16 @@ public class SubmissionValidationService {
       // terminal submission status and the status validator prevents claim re-validation, thereby
       // preserving the claim results already written by ClaimValidationService.
       dataClaimsRestClient.updateSubmission(submissionId.toString(), submissionPatch);
-      dataClaimsRestClient.updateBulkSubmission(
-          String.valueOf(bulkSubmissionId), bulkSubmissionPatch);
+      if (bulkSubmissionId != null) {
+        dataClaimsRestClient.updateBulkSubmission(bulkSubmissionId.toString(), bulkSubmissionPatch);
+      }
     } else {
       // Persist the bulk status first. The submission idempotency guard keys off the submission
       // status, so a failed bulk patch leaves the submission retryable and allows the redelivery to
       // recover the bulk status.
-      dataClaimsRestClient.updateBulkSubmission(
-          String.valueOf(bulkSubmissionId), bulkSubmissionPatch);
+      if (bulkSubmissionId != null) {
+        dataClaimsRestClient.updateBulkSubmission(bulkSubmissionId.toString(), bulkSubmissionPatch);
+      }
       dataClaimsRestClient.updateSubmission(submissionId.toString(), submissionPatch);
     }
     return context;

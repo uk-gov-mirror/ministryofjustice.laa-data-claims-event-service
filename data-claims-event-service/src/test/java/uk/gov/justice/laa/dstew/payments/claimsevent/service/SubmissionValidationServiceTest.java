@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -127,6 +128,7 @@ class SubmissionValidationServiceTest {
       UUID claimId =
           claimStatus != null ? new UUID(1, 1) : null; // only create claimId if there is a claim
       SubmissionResponse submission = buildSubmission(submissionId, claimId, isNilSubmission);
+      submission.setBulkSubmissionId(new UUID(3, 3));
 
       when(dataClaimsRestClient.getSubmission(submissionId))
           .thenReturn(ResponseEntity.of(Optional.of(submission)));
@@ -179,6 +181,8 @@ class SubmissionValidationServiceTest {
       UUID submissionId = new UUID(0, 0);
       UUID claimId = new UUID(1, 1);
       SubmissionResponse initialSubmission = buildSubmission(submissionId, claimId, false);
+      UUID bulkSubmissionId = new UUID(3, 3);
+      initialSubmission.setBulkSubmissionId(bulkSubmissionId);
       SubmissionResponse failedSubmission =
           getSubmission(
               SubmissionStatus.VALIDATION_FAILED,
@@ -187,6 +191,7 @@ class SubmissionValidationServiceTest {
               "officeAccountNumber",
               false,
               List.of());
+      failedSubmission.setBulkSubmissionId(bulkSubmissionId);
 
       when(dataClaimsRestClient.getSubmission(submissionId))
           .thenReturn(ResponseEntity.ok(initialSubmission), ResponseEntity.ok(failedSubmission));
@@ -235,6 +240,7 @@ class SubmissionValidationServiceTest {
       UUID submissionId = new UUID(0, 0);
       UUID claimId = new UUID(1, 1);
       SubmissionResponse submission = buildSubmission(submissionId, claimId, false);
+      submission.setBulkSubmissionId(new UUID(3, 3));
 
       when(dataClaimsRestClient.getSubmission(submissionId))
           .thenReturn(ResponseEntity.ok(submission), ResponseEntity.ok(submission));
@@ -442,6 +448,99 @@ class SubmissionValidationServiceTest {
       verify(eventServiceMetricService, never()).incrementTotalValidSubmissions();
       verify(eventServiceMetricService, never()).incrementTotalInvalidSubmissions();
       verify(eventServiceMetricService, never()).incrementTotalFinalValidationSucceeded();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void shouldCompleteNilSubmissionValidationSuccessfully(boolean finalValidation) {
+      UUID submissionId = UUID.randomUUID();
+      SubmissionResponse submission =
+          SubmissionResponse.builder()
+              .submissionId(submissionId)
+              .isNilSubmission(true)
+              .areaOfLaw(AreaOfLaw.LEGAL_HELP)
+              .officeAccountNumber("1234")
+              .status(
+                  finalValidation
+                      ? SubmissionStatus.READY_FOR_FINAL_VALIDATION
+                      : SubmissionStatus.READY_FOR_VALIDATION)
+              .build();
+      when(dataClaimsRestClient.getSubmission(submissionId))
+          .thenReturn(ResponseEntity.ok(submission));
+
+      SubmissionValidationContext result =
+          finalValidation
+              ? submissionValidationService.finalValidateSubmission(submissionId)
+              : submissionValidationService.validateSubmission(submissionId);
+
+      assertThat(result.hasErrors()).isFalse();
+      ArgumentCaptor<SubmissionPatch> patchCaptor = ArgumentCaptor.forClass(SubmissionPatch.class);
+      verify(dataClaimsRestClient)
+          .updateSubmission(eq(submissionId.toString()), patchCaptor.capture());
+      assertThat(patchCaptor.getValue().getStatus())
+          .isEqualTo(
+              finalValidation
+                  ? SubmissionStatus.VALIDATION_SUCCEEDED
+                  : SubmissionStatus.VALIDATED_PENDING_APPROVAL);
+      verify(dataClaimsRestClient, never()).updateBulkSubmission(any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void shouldPersistNilSubmissionValidationFailure(boolean finalValidation) {
+      UUID submissionId = UUID.randomUUID();
+      SubmissionResponse submission =
+          SubmissionResponse.builder()
+              .submissionId(submissionId)
+              .isNilSubmission(true)
+              .status(
+                  finalValidation
+                      ? SubmissionStatus.READY_FOR_FINAL_VALIDATION
+                      : SubmissionStatus.READY_FOR_VALIDATION)
+              .build();
+      when(dataClaimsRestClient.getSubmission(submissionId))
+          .thenReturn(ResponseEntity.ok(submission));
+      doAnswer(
+              invocation -> {
+                SubmissionValidationContext context = invocation.getArgument(1);
+                context.addSubmissionValidationError("validation failed");
+                return null;
+              })
+          .when(submissionValidator)
+          .validate(any(), any());
+
+      SubmissionValidationContext result =
+          finalValidation
+              ? submissionValidationService.finalValidateSubmission(submissionId)
+              : submissionValidationService.validateSubmission(submissionId);
+
+      assertThat(result.hasErrors()).isTrue();
+      ArgumentCaptor<SubmissionPatch> patchCaptor = ArgumentCaptor.forClass(SubmissionPatch.class);
+      verify(dataClaimsRestClient)
+          .updateSubmission(eq(submissionId.toString()), patchCaptor.capture());
+      assertThat(patchCaptor.getValue().getStatus()).isEqualTo(SubmissionStatus.VALIDATION_FAILED);
+      assertThat(patchCaptor.getValue().getValidationMessages()).hasSize(1);
+      verify(dataClaimsRestClient, never()).updateBulkSubmission(any(), any());
+      verifyNoInteractions(claimValidationService);
+    }
+
+    @Test
+    void shouldNotRetryBulkPatchForFailedNilSubmission() {
+      UUID submissionId = UUID.randomUUID();
+      SubmissionResponse submission =
+          SubmissionResponse.builder()
+              .submissionId(submissionId)
+              .isNilSubmission(true)
+              .status(SubmissionStatus.VALIDATION_FAILED)
+              .build();
+      when(dataClaimsRestClient.getSubmission(submissionId))
+          .thenReturn(ResponseEntity.ok(submission));
+
+      submissionValidationService.finalValidateSubmission(submissionId);
+
+      verifyNoInteractions(submissionValidator, claimValidationService);
+      verify(dataClaimsRestClient, never()).updateSubmission(any(), any());
+      verify(dataClaimsRestClient, never()).updateBulkSubmission(any(), any());
     }
 
     @Test
