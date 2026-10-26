@@ -10,7 +10,17 @@ on:
         required: true
         default: "patch"
         description: "Release type"
-        options: [ "patch", "minor", "major" ]
+        options: [ "patch", "minor", "major", "none" ]
+      override_version:
+        type: string
+        required: false
+        description: "Hotfix only: version to publish when release_type is none (e.g. 0.2.3.1)"
+      last_environment:
+        type: choice
+        required: true
+        default: "uat"
+        description: "Hotfix only: last environment to deploy to"
+        options: [ "uat", "staging", "production" ]
 
 permissions:
   contents: read
@@ -34,6 +44,7 @@ jobs:
       java_version: *JAVA_VERSION
       java_distribution: *JDK_DISTRIBUTION
       release_type: ${{ inputs.release_type != 'auto' && inputs.release_type || '' }}
+      override_version: ${{ inputs.override_version }}
     secrets:
       # requires a pat due to accessing a private github repos packages (providers-api)
       gh_token: ${{ secrets.PHILS_PAT_TOKEN }}
@@ -104,6 +115,7 @@ jobs:
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME: ${{ secrets.LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME }}
 
   deploy-staging:
+    if: ${{ inputs.last_environment != 'uat' }}
     needs:
       - ecr-publish-image
       - pact-test
@@ -127,6 +139,7 @@ jobs:
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME: ${{ secrets.LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME }}
 
   deploy-production:
+    if: ${{ inputs.last_environment == 'production' }}
     needs:
       - ecr-publish-image
       - pact-test
