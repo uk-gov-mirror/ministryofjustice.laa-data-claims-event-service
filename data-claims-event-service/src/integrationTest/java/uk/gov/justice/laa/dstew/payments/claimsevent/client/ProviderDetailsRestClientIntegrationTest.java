@@ -137,7 +137,7 @@ class ProviderDetailsRestClientIntegrationTest extends MockServerIntegrationTest
 
       // When
       Mono<ProviderFirmOfficeContractAndScheduleDto> result =
-          providerDetailsRestClient.getProviderFirmSchedules(officeCode, effectiveDate, true);
+          providerDetailsRestClient.getProviderFirmSchedules(officeCode, effectiveDate, true, true);
 
       // Then
       Optional<ProviderFirmOfficeContractAndScheduleDto> providerFirmSummary =
