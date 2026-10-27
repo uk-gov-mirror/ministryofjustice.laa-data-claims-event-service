@@ -16,6 +16,12 @@ on:
       image_tag:
         required: true
         type: string
+      release_version:
+        required: true
+        type: string
+      notification_environment_name:
+        required: true
+        type: string
     secrets:
       pact_broker_username:
         required: true
@@ -31,6 +37,8 @@ on:
         required: true
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME:
         required: true
+      slack_webhook:
+        required: true
 
 permissions:
   contents: read
@@ -44,9 +52,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Set branch name
         run: echo "GIT_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}" >> $GITHUB_ENV
+
+      - name: Get currently deployed ref
+        id: deployed
+        # This only feeds the Slack notification and must not block deployment.
+        continue-on-error: true
+        uses: ministryofjustice/laa-data-claims-api/.github/actions/get_deployed_git_ref@3899ebf9d0c31cbfa4db973a698dc1cb48bb5fa5 # v1.35.8
+        with:
+          kube-cert: ${{ secrets.kube_cert }}
+          kube-token: ${{ secrets.KUBE_TOKEN }}
+          kube-cluster: ${{ secrets.KUBE_CLUSTER }}
+          kube-namespace: ${{ secrets.KUBE_NAMESPACE }}
+          deployment: ${{ inputs.deployment_name }}-data-claims-events
+          image-prefix: ${{ vars.LAA_DATA_CLAIMS_EVENT_SERVICE_IMAGE_PREFIX }}
 
       - name: Can I deploy?
         id: can-i-deploy
@@ -103,6 +127,16 @@ jobs:
 
           echo "images=$IMAGES" >> $GITHUB_OUTPUT
           echo "Deployed Images: $(echo "$IMAGES" | jq)"
+
+      - name: Notify Slack of ${{ inputs.notification_environment_name }} update
+        continue-on-error: true
+        uses: ministryofjustice/laa-data-claims-api/.github/actions/release_diff_notify@3899ebf9d0c31cbfa4db973a698dc1cb48bb5fa5 # v1.35.8
+        with:
+          from-ref: ${{ steps.deployed.outputs.git-ref }}
+          to-ref: ${{ github.sha }}
+          environment-name: ${{ inputs.notification_environment_name }}
+          to-label: "v${{ inputs.release_version }}"
+          slack-webhook-url: ${{ secrets.slack_webhook }}
 
       - name: Record deployment to pact broker
         id: record-deployment-to-pact-broker

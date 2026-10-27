@@ -98,6 +98,8 @@ jobs:
       deployment_name: uat
       claim_api_environment_name: main
       image_tag: ${{ needs.ecr-publish-image.outputs.published_image_version }}
+      release_version: ${{ needs.release.outputs.published_artifact_version }}
+      notification_environment_name: UAT
     secrets:
       pact_broker_username: ${{ secrets.PACT_BROKER_USERNAME }}
       pact_broker_password: ${{ secrets.PACT_BROKER_PASSWORD }}
@@ -106,6 +108,7 @@ jobs:
       KUBE_TOKEN: ${{ secrets.KUBE_TOKEN }}
       KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME: ${{ secrets.LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME }}
+      slack_webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   deploy-staging:
     needs:
@@ -121,6 +124,8 @@ jobs:
       deployment_name: stg
       claim_api_environment_name: stg
       image_tag: ${{ needs.ecr-publish-image.outputs.published_image_version }}
+      release_version: ${{ needs.release.outputs.published_artifact_version }}
+      notification_environment_name: Staging
     secrets:
       pact_broker_username: ${{ secrets.PACT_BROKER_USERNAME }}
       pact_broker_password: ${{ secrets.PACT_BROKER_PASSWORD }}
@@ -129,6 +134,7 @@ jobs:
       KUBE_TOKEN: ${{ secrets.KUBE_TOKEN }}
       KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME: ${{ secrets.LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME }}
+      slack_webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   deploy-production:
     needs:
@@ -144,6 +150,8 @@ jobs:
       deployment_name: prod
       claim_api_environment_name: prod
       image_tag: ${{ needs.ecr-publish-image.outputs.published_image_version }}
+      release_version: ${{ needs.release.outputs.published_artifact_version }}
+      notification_environment_name: Production
     secrets:
       pact_broker_username: ${{ secrets.PACT_BROKER_USERNAME }}
       pact_broker_password: ${{ secrets.PACT_BROKER_PASSWORD }}
@@ -152,3 +160,4 @@ jobs:
       KUBE_TOKEN: ${{ secrets.KUBE_TOKEN }}
       KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
       LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME: ${{ secrets.LAA_DATA_CLAIMS_EVENT_SERVICE_ECR_ROLE_TO_ASSUME }}
+      slack_webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
